@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import HomeScreen from './screens/HomeScreen';
 import RutasSelectionScreen from './screens/RutasSelectionScreen';
+import 'react-native-get-random-values'
 
 const Stack = createStackNavigator();
 
