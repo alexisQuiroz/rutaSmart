@@ -1,24 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import MapView, { Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
-import MapViewDirections from 'react-native-maps-directions';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
+import { GOOGLE_MAPS_API_KEY } from '../env';
 
-const GOOGLE_MAPS_APIKEY = 'AIzaSyB8c8sGA9H8s1RtwffWi4vKSSluR4ZZ8eQ';
+const { width, height } = Dimensions.get('window');
 
 const RutasSelectionScreen = () => {
   const [origin, setOrigin] = useState(null);
   const [destination, setDestination] = useState(null);
-  const [distance, setDistance] = useState(null);
+  const [routes, setRoutes] = useState([]);
   const [locationLoaded, setLocationLoaded] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [visibleTooltipIndex, setVisibleTooltipIndex] = useState(null);
 
-  // Función para obtener detalles de un lugar, basada en la función fetchPlaceDetails
   const fetchPlaceDetails = async (placeId) => {
     try {
       const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/details/json?placeid=${placeId}&key=${GOOGLE_MAPS_APIKEY}`
+        `https://maps.googleapis.com/maps/api/place/details/json?placeid=${placeId}&key=${GOOGLE_MAPS_API_KEY}`
       );
       const result = await response.json();
       const location = result.result.geometry.location;
@@ -32,6 +32,39 @@ const RutasSelectionScreen = () => {
     }
   };
 
+  const decodePolyline = (encoded) => {
+    let points = [];
+    let index = 0, len = encoded.length;
+    let lat = 0, lng = 0;
+
+    while (index < len) {
+      let b, shift = 0, result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+
+      points.push({
+        latitude: lat / 1E5,
+        longitude: lng / 1E5,
+      });
+    }
+    return points;
+  };
+
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -39,9 +72,7 @@ const RutasSelectionScreen = () => {
         setErrorMsg('Permiso de ubicación denegado');
         return;
       }
-      let location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
+      let location = await Location.getCurrentPositionAsync({});
       setOrigin({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
@@ -49,6 +80,40 @@ const RutasSelectionScreen = () => {
       setLocationLoaded(true);
     })();
   }, []);
+
+  useEffect(() => {
+    const fetchRoutes = async () => {
+      if (!origin || !destination) return;
+
+      try {
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&alternatives=true&key=${GOOGLE_MAPS_API_KEY}`
+        );
+        const result = await response.json();
+
+        if (result.routes && result.routes.length > 0) {
+          const newRoutes = result.routes.map((route, index) => {
+            const leg = route.legs[0];
+            const coordinates = decodePolyline(route.overview_polyline.points);
+            const middleIndex = Math.floor(coordinates.length / 2);
+            return {
+              coordinates,
+              middlePoint: coordinates[middleIndex],
+              distance: leg.distance ? leg.distance.text : "No disponible",
+              duration: leg.duration ? leg.duration.text : "No disponible",
+              color: index === 0 ? 'blue' : index === 1 ? 'green' : 'purple',
+            };
+          });
+          setRoutes(newRoutes);
+        } else {
+          console.log("No se encontraron rutas alternativas.");
+        }
+      } catch (error) {
+        console.log("Error al obtener rutas alternativas:", error);
+      }
+    };
+    fetchRoutes();
+  }, [origin, destination]);
 
   const handleDestinationSelect = async (data) => {
     const placeDetails = await fetchPlaceDetails(data.place_id);
@@ -59,6 +124,15 @@ const RutasSelectionScreen = () => {
     }
   };
 
+  const toggleTooltip = (index) => {
+    // Show or hide the tooltip for the specific route
+    if (visibleTooltipIndex === index) {
+      setVisibleTooltipIndex(null);
+    } else {
+      setVisibleTooltipIndex(index);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.searchContainer}>
@@ -66,7 +140,7 @@ const RutasSelectionScreen = () => {
           placeholder="Buscar destino"
           onPress={(data) => handleDestinationSelect(data)}
           query={{
-            key: GOOGLE_MAPS_APIKEY,
+            key: GOOGLE_MAPS_API_KEY,
             language: 'es',
           }}
           nearbyPlacesAPI="GooglePlacesSearch"
@@ -78,33 +152,33 @@ const RutasSelectionScreen = () => {
       {locationLoaded && origin ? (
         <MapView
           style={styles.map}
-          initialRegion={{
+          region={{
             latitude: origin.latitude,
             longitude: origin.longitude,
             latitudeDelta: 0.05,
             longitudeDelta: 0.05,
           }}
+          showsTraffic={true}
         >
-          <Marker coordinate={origin} title="Ubicación Actual" description="Este es tu punto de inicio" />
-
-          {destination && (
-            <>
-              <Marker coordinate={destination} title="Destino" />
-              <MapViewDirections
-                origin={origin}
-                destination={destination}
-                apikey={GOOGLE_MAPS_APIKEY}
+          {routes.map((route, index) => (
+            <React.Fragment key={index}>
+              <Polyline
+                coordinates={route.coordinates}
+                strokeColor={route.color}
                 strokeWidth={4}
-                strokeColor="blue"
-                onReady={(result) => {
-                  setDistance(result.distance);
-                }}
-                onError={(error) => {
-                  console.log("Error al obtener la dirección:", error);
-                }}
+                tappable={true}
+                onPress={() => toggleTooltip(index)}
               />
-            </>
-          )}
+              
+              {/* Show tooltip only if this route's tooltip is visible */}
+              {visibleTooltipIndex === index && (
+                <View style={[styles.tooltipContainer, { top: height / 2 - 50, left: width / 2 - 60 }]}>
+                  <Text style={styles.tooltipText}>{`Ruta ${index + 1}`}</Text>
+                  <Text style={styles.tooltipText}>{`${route.duration} • ${route.distance}`}</Text>
+                </View>
+              )}
+            </React.Fragment>
+          ))}
         </MapView>
       ) : (
         <View style={styles.loading}>
@@ -112,14 +186,11 @@ const RutasSelectionScreen = () => {
         </View>
       )}
 
-      {distance && (
-        <View style={styles.infoContainer}>
-          <Text style={styles.distanceText}>Distancia: {distance.toFixed(2)} km</Text>
-          <TouchableOpacity style={styles.startTripButton}>
-            <Text style={styles.startTripButtonText}>Desliza para comenzar el viaje</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      <View style={styles.infoContainer}>
+        <TouchableOpacity style={styles.startTripButton}>
+          <Text style={styles.startTripButtonText}>Desliza para comenzar el viaje</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -158,6 +229,20 @@ const styles = StyleSheet.create({
       fontSize: 16,
     },
   },
+  tooltipContainer: {
+    position: 'absolute',
+    padding: 8,
+    borderRadius: 5,
+    backgroundColor: 'white',
+    borderColor: 'black',
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  tooltipText: {
+    fontSize: 12,
+    color: '#000',
+    fontWeight: 'bold',
+  },
   infoContainer: {
     position: 'absolute',
     bottom: 20,
@@ -168,12 +253,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
-  distanceText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
   startTripButton: {
-    marginTop: 10,
     paddingVertical: 10,
     paddingHorizontal: 20,
     backgroundColor: '#2196F3',
