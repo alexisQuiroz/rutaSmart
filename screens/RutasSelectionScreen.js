@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
-import MapView, { Polyline } from 'react-native-maps';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
+import MapView, { Polyline, Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import { GOOGLE_MAPS_API_KEY } from '../env';
@@ -13,7 +13,8 @@ const RutasSelectionScreen = () => {
   const [routes, setRoutes] = useState([]);
   const [locationLoaded, setLocationLoaded] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
-  const [visibleTooltipIndex, setVisibleTooltipIndex] = useState(null);
+  const [buttonText, setButtonText] = useState('Iniciar Viaje');
+  const [selectedRouteIndex, setSelectedRouteIndex] = useState(null);
 
   const fetchPlaceDetails = async (placeId) => {
     try {
@@ -124,13 +125,9 @@ const RutasSelectionScreen = () => {
     }
   };
 
-  const toggleTooltip = (index) => {
-    // Show or hide the tooltip for the specific route
-    if (visibleTooltipIndex === index) {
-      setVisibleTooltipIndex(null);
-    } else {
-      setVisibleTooltipIndex(index);
-    }
+  const handleRouteSelect = (index) => {
+    setSelectedRouteIndex(index);
+    setButtonText(`Ruta ${index + 1} Seleccionada`);
   };
 
   return (
@@ -160,6 +157,26 @@ const RutasSelectionScreen = () => {
           }}
           showsTraffic={true}
         >
+          {/* Marker para la ubicación de origen */}
+          {origin && (
+            <Marker
+              coordinate={origin}
+              title="Ubicación Actual"
+              description="Este es tu punto de inicio"
+              pinColor="blue"
+            />
+          )}
+
+          {/* Marker para la ubicación de destino */}
+          {destination && (
+            <Marker
+              coordinate={destination}
+              title="Destino"
+              description="Este es tu destino"
+              pinColor="red"
+            />
+          )}
+
           {routes.map((route, index) => (
             <React.Fragment key={index}>
               <Polyline
@@ -167,16 +184,21 @@ const RutasSelectionScreen = () => {
                 strokeColor={route.color}
                 strokeWidth={4}
                 tappable={true}
-                onPress={() => toggleTooltip(index)}
+                onPress={() => handleRouteSelect(index)}
               />
               
-              {/* Show tooltip only if this route's tooltip is visible */}
-              {visibleTooltipIndex === index && (
-                <View style={[styles.tooltipContainer, { top: height / 2 - 50, left: width / 2 - 60 }]}>
-                  <Text style={styles.tooltipText}>{`Ruta ${index + 1}`}</Text>
-                  <Text style={styles.tooltipText}>{`${route.duration} • ${route.distance}`}</Text>
-                </View>
-              )}
+              {/* Static tooltip positioned at the middle of each route */}
+              <Marker
+                coordinate={route.middlePoint}
+                anchor={{ x: 0.5, y: 1 }}
+              >
+                <TouchableOpacity onPress={() => handleRouteSelect(index)}>
+                  <View style={[styles.tooltipContainer, { borderColor: route.color }]}>
+                    <Text style={styles.tooltipText}>{`Ruta ${index + 1}`}</Text>
+                    <Text style={styles.tooltipText}>{`${route.duration} • ${route.distance}`}</Text>
+                  </View>
+                </TouchableOpacity>
+              </Marker>
             </React.Fragment>
           ))}
         </MapView>
@@ -188,7 +210,7 @@ const RutasSelectionScreen = () => {
 
       <View style={styles.infoContainer}>
         <TouchableOpacity style={styles.startTripButton}>
-          <Text style={styles.startTripButtonText}>Desliza para comenzar el viaje</Text>
+          <Text style={styles.startTripButtonText}>{buttonText}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -230,12 +252,10 @@ const styles = StyleSheet.create({
     },
   },
   tooltipContainer: {
-    position: 'absolute',
     padding: 8,
     borderRadius: 5,
-    backgroundColor: 'white',
-    borderColor: 'black',
     borderWidth: 1,
+    backgroundColor: 'white',
     alignItems: 'center',
   },
   tooltipText: {
@@ -266,3 +286,4 @@ const styles = StyleSheet.create({
 });
 
 export default RutasSelectionScreen;
+``
