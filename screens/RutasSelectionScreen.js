@@ -101,10 +101,23 @@ const RutasSelectionScreen = () => {
               coordinates,
               middlePoint: coordinates[middleIndex],
               distance: leg.distance ? leg.distance.text : "No disponible",
-              duration: leg.duration ? leg.duration.text : "No disponible",
-              color: index === 0 ? 'blue' : index === 1 ? 'green' : 'purple',
+              duration: leg.duration ? leg.duration.value : Infinity, // En segundos para comparar
+              displayDuration: leg.duration ? leg.duration.text : "No disponible",
+              color: 'rgba(0, 0, 255, 0.25)', // Color con opacidad por defecto (25%)
             };
           });
+
+          // Encontrar la ruta más corta en tiempo
+          const shortestRouteIndex = newRoutes.reduce(
+            (minIndex, route, index, array) =>
+              route.duration < array[minIndex].duration ? index : minIndex,
+            0
+          );
+
+          // Actualizar colores: ruta más corta en azul sólido, otras en azul opaco
+          newRoutes[shortestRouteIndex].color = 'blue';
+          setButtonText(`Ruta ${shortestRouteIndex + 1} Seleccionada`); // Texto del botón
+          setSelectedRouteIndex(shortestRouteIndex); // Establecer la ruta seleccionada
           setRoutes(newRoutes);
         } else {
           console.log("No se encontraron rutas alternativas.");
@@ -128,6 +141,13 @@ const RutasSelectionScreen = () => {
   const handleRouteSelect = (index) => {
     setSelectedRouteIndex(index);
     setButtonText(`Ruta ${index + 1} Seleccionada`);
+
+    // Actualizar colores: ruta seleccionada en azul sólido, otras en azul opaco (25%)
+    const updatedRoutes = routes.map((route, routeIndex) => ({
+      ...route,
+      color: routeIndex === index ? 'blue' : 'rgba(0, 0, 255, 0.25)',
+    }));
+    setRoutes(updatedRoutes);
   };
 
   return (
@@ -157,7 +177,6 @@ const RutasSelectionScreen = () => {
           }}
           showsTraffic={true}
         >
-          {/* Marker para la ubicación de origen */}
           {origin && (
             <Marker
               coordinate={origin}
@@ -167,7 +186,6 @@ const RutasSelectionScreen = () => {
             />
           )}
 
-          {/* Marker para la ubicación de destino */}
           {destination && (
             <Marker
               coordinate={destination}
@@ -187,15 +205,15 @@ const RutasSelectionScreen = () => {
                 onPress={() => handleRouteSelect(index)}
               />
               
-              {/* Static tooltip positioned at the middle of each route */}
               <Marker
                 coordinate={route.middlePoint}
                 anchor={{ x: 0.5, y: 1 }}
               >
                 <TouchableOpacity onPress={() => handleRouteSelect(index)}>
                   <View style={[styles.tooltipContainer, { borderColor: route.color }]}>
-                    <Text style={styles.tooltipText}>{`Ruta ${index + 1}`}</Text>
-                    <Text style={styles.tooltipText}>{`${route.duration} • ${route.distance}`}</Text>
+                    {/* <Text style={styles.tooltipText}>{`Ruta ${index + 1}`}</Text>
+                    <Text style={styles.tooltipText}>{`${route.displayDuration} • ${route.distance}`}</Text> */}
+                    <Text style={styles.tooltipText}>{`${route.displayDuration}`}</Text>
                   </View>
                 </TouchableOpacity>
               </Marker>
@@ -286,4 +304,3 @@ const styles = StyleSheet.create({
 });
 
 export default RutasSelectionScreen;
-``
